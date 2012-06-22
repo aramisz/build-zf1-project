@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# This is a quick hack. This may things for you.
+
+# Arguments
+if [ $# -ne 1 ];then
+    echo "Usage: $0 <project>"
+    exit 1
+else
+    project=$1
+fi
+
+# Configuration settings 
+zf=/usr/bin/zf
+zendlibrary=/usr/share/php/libzend-framework-php/Zend
+webroot=/var/www
+
+# Sanity check
+$zf show version > /dev/null 
+if [ $? -ne 0 ];then
+    echo "Cannot find Zend Tool" 
+    echo 1
+fi
+
+sudo -v
+if [ $? -ne 0 ];then
+    echo "Can't use sudo"
+    exit 1
+fi
+
+if [ ! -d $webroot ];then
+    echo "Web root does not exist"
+    exit 1
+fi
+
+# Create the project
+if [ -d $webroot/$project ];then
+    echo "Project already exists"
+    exit 1
+else
+    $zf create project $webroot/$project 2>/dev/null
+    if [ $? -ne 0 ];then
+        echo "Failed to create project"
+        exit 1
+    fi 
+fi
+
+# Set up apache
+echo "<VirtualHost *:80>" > /tmp/$project
+echo "    ServerName $project" >> /tmp/$project
+echo "    DocumentRoot /var/www/$project/public/" >> /tmp/$project
+echo "" >> /tmp/$project
+echo "    <Directory />" >> /tmp/$project
+echo "        Options FollowSymLinks" >> /tmp/$project
+echo "        AllowOverride All" >> /tmp/$project
+echo "    </Directory>" >> /tmp/$project
+echo "</VirtualHost>" >> /tmp/$project
+
+sudo mv /tmp/$project /etc/apache2/sites-available/$project
+
+cd /etc/apache2/sites-enabled/
+sudo ln -sf ../sites-available/$project .
+
+sudo service apache2 restart
+
+echo "Installing library, please wait"
+cp -a $zendlibrary $webroot/$project/library/
+
+echo "127.0.0.1 $project" | sudo tee -a /etc/hosts >/dev/null
+
+# Set up git repo
+echo "Initializing git"
+cd $webroot/$project
+echo "Zend/" >>  $webroot/$project/library/.gitignore
+git init . >/dev/null
+git add . >/dev/null
+git commit -m "New project: $project created" >/dev/null
+
+echo "Done"
+
+firefox http://$project >/dev/null 2>/dev/null &
